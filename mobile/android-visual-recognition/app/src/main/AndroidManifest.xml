@@ -2,6 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.github.frtu.visualrecognition">
 
+    <!-- https://developer.android.com/guide/topics/media/camera.html -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- https://developer.android.com/guide/topics/manifest/uses-feature-element.html#hw-features -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.front.autofocus" android:required="false"/>
+
+    <!--
+    Storage Permission - If your application saves images or videos to the device's external storage (SD Card),
+    you must also specify this in the manifest.
+    -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
