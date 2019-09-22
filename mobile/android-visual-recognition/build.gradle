@@ -11,6 +11,16 @@ buildscript {
     }
 }
 
+subprojects {
+    ext.commonMinSdkVersion = 15
+    ext.commonTargetSdkVersion = 27
+    // Below all libraries & compile version should be in Sync with MAJOR version
+    ext.commonCompileSdkVersion = 28
+    ext.commonBuildToolsVersion = "28.0.2"
+    ext.commonSupportLibVersion = "27.1.1"
+    // https://developer.android.com/topic/libraries/support-library/packages.html
+}
+
 allprojects {
     repositories {
         google()
