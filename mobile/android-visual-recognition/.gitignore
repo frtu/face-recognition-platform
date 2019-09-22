@@ -5,10 +5,8 @@
 /.idea/modules.xml
 /.idea/workspace.xml
 .DS_Store
-/build
+*/build
 /captures
 .externalNativeBuild
 .idea/*
 import-summary.txt
-opencv-android/build/
-openCVLibrary*
