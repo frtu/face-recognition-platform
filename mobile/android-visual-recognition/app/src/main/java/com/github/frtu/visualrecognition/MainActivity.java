@@ -1,49 +1,40 @@
 package com.github.frtu.visualrecognition;
 
 import android.app.Activity;
-import android.content.Context;
-import android.hardware.Camera;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
-import com.github.frtu.visualrecognition.camera.CameraManager;
-import com.github.frtu.visualrecognition.camera.CameraPreviewBase;
+import com.github.frtu.visualrecognition.io.AndroidIOUtils;
+import com.github.frtu.visualrecognition.opencv.Colors;
+import com.github.frtu.visualrecognition.opencv.ObjectDetector;
 import com.github.frtu.visualrecognition.opencv.OpenCVManager;
+import com.github.frtu.visualrecognition.opencv.coordinate.HighlightObjectMapper;
 
 import org.opencv.android.CameraBridgeViewBase;
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfRect;
-import org.opencv.core.Rect;
-import org.opencv.core.Size;
-import org.opencv.imgproc.Imgproc;
-import org.opencv.objdetect.CascadeClassifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 
-public class MainActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener {
+public class MainActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener2 {
     private static final Logger logger = LoggerFactory.getLogger(MainActivity.class);
 
     private OpenCVManager openCVManager;
 
-    private CameraBridgeViewBase openCvCameraView;
-    private CascadeClassifier cascadeClassifier;
-    private Mat grayscaleImage;
-    private int absoluteFaceSize;
+    private ObjectDetector faceDetector;
+    private HighlightObjectMapper highlightFaceMapper = new HighlightObjectMapper(Colors.GREEN, 3);
 
+    private ObjectDetector eyeDetector;
+    private HighlightObjectMapper highlightEyeMapper = new HighlightObjectMapper(Colors.YELLOW, 3);
+
+    /**
+     * Called when the activity is first created.
+     */
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        CameraManager cameraManager = new CameraManager(this);
-        cameraManager.checkAndRequestCameraPermissionIfPossible(this);
+    public void onCreate(Bundle savedInstanceState) {
+        logger.info("called onCreate");
 
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -51,40 +42,59 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
         // Create our Preview view and set it as the content of our activity.
         FrameLayout preview = findViewById(R.id.container);
-
         openCVManager = new OpenCVManager(this, 0);
         openCVManager.bindFrameLayout(preview);
         openCVManager.bindCvCameraViewListener(this);
 
-
+        File faceCascade = null;
+        File eyeCascade = null;
         try {
             // Copy the resource into a temp file so OpenCV can load it
-            InputStream is = getResources().openRawResource(R.raw.lbpcascade_frontalface);
-            File cascadeDir = getDir("cascade", Context.MODE_PRIVATE);
-            File mCascadeFile = new File(cascadeDir, "lbpcascade_frontalface.xml");
-            FileOutputStream os = new FileOutputStream(mCascadeFile);
+            faceCascade = AndroidIOUtils.copyToFile(this, R.raw.lbpcascade_frontalface,
+                    "cascade", "lbpcascade_frontalface.xml");
 
+            logger.info("Loading cascacde file : {}", faceCascade.getAbsolutePath());
+            faceDetector = new ObjectDetector(faceCascade);
 
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = is.read(buffer)) != -1) {
-                os.write(buffer, 0, bytesRead);
-            }
-            is.close();
-            os.close();
+            eyeCascade = AndroidIOUtils.copyToFile(this, R.raw.haarcascade_lefteye_2splits,
+                    "cascade", "haarcascade_lefteye.xml");
 
-            // Load the cascade classifier
-            cascadeClassifier = new CascadeClassifier(mCascadeFile.getAbsolutePath());
+            logger.info("Loading cascacde file : {}", eyeCascade.getAbsolutePath());
+            eyeDetector = new ObjectDetector(eyeCascade);
         } catch (Exception e) {
-            Log.e("OpenCVActivity", "Error loading cascade", e);
+            logger.error("Failed to load cascade. Exception thrown: ", e);
+        } finally {
+            if (faceCascade != null) {
+                // Delete folder after copy
+                faceCascade.getParentFile().delete();
+            }
         }
     }
 
+    @Override
+    public void onCameraViewStarted(int width, int height) {
+        // The faces will be a 20% of the height of the screen
+        double objectFactor = 0.2;
+        faceDetector.setMinOjbSize((int) (height * objectFactor));
+        eyeDetector.setMinOjbSize((int) (height * objectFactor * objectFactor));
+    }
 
     @Override
-    public void onResume() {
-        super.onResume();
-        openCVManager.startOrResume();
+    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        final Mat rgba = inputFrame.rgba();
+        final Mat gray = inputFrame.gray();
+
+        highlightFaceMapper.setImage(rgba);
+        faceDetector.detectObject(gray, highlightFaceMapper);
+
+        highlightEyeMapper.setImage(rgba);
+        eyeDetector.detectObject(gray, highlightEyeMapper);
+
+        return highlightFaceMapper.getResultImage();
+    }
+
+    @Override
+    public void onCameraViewStopped() {
     }
 
     @Override
@@ -93,41 +103,14 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         openCVManager.stop();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        openCVManager.startOrResume();
+    }
+
     public void onDestroy() {
         super.onDestroy();
         openCVManager.stop();
-    }
-
-    @Override
-    public void onCameraViewStarted(int width, int height) {
-        grayscaleImage = new Mat(height, width, CvType.CV_8UC4);
-
-        // The faces will be a 20% of the height of the screen
-        absoluteFaceSize = (int) (height * 0.2);
-    }
-
-    @Override
-    public void onCameraViewStopped() {
-    }
-
-    @Override
-    public Mat onCameraFrame(Mat aInputFrame) {
-        // Create a grayscale image
-        Imgproc.cvtColor(aInputFrame, grayscaleImage, Imgproc.COLOR_RGBA2RGB);
-
-        MatOfRect faces = new MatOfRect();
-
-        // Use the classifier to detect faces
-        if (cascadeClassifier != null) {
-            cascadeClassifier.detectMultiScale(grayscaleImage, faces, 1.1, 2, 2,
-                    new Size(absoluteFaceSize, absoluteFaceSize), new Size());
-        }
-
-        // If there are any faces found, draw a rectangle around it
-        Rect[] facesArray = faces.toArray();
-//        for (int i = 0; i <facesArray.length; i++)
-//            Core.rectangle(aInputFrame, facesArray[i].tl(), facesArray[i].br(), new Scalar(0, 255, 0, 255), 3);
-
-        return aInputFrame;
     }
 }
